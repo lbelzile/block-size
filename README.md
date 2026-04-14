@@ -21,7 +21,7 @@ Functions from package `mev` that are used in the paper include notably:
 The script `helpers.R` contains functions for the power study, including
 
 - `rdistmax` for simulating from the maximum of `m` observations from a parametric distribution `dist`.
-- `sim_alt` for simulating data from a GEV where the $m$th order statistic of a block of size $m$ is drawn from a different distribution.
+- `sim_alt` for simulating data from a GEV where the largest observation of a block of size $m$ is drawn from a different distribution.
 - `sim_alt_mda` for simulating data from the maximum of `m` observations from a parametric distribution, mimicking `sim_alt`.
 - `simu_fn` for running the simulation study for independent data drawn from a GEV
 - `simu_fn_mda` for running the simulation study with independent data drawn from the max domain of attraction.
