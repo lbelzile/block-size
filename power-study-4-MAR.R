@@ -6,7 +6,7 @@ source("helpers.R")
 library(mev)
 library(simsalapar)
 date <- 20250414
-seed_init <- floor(runif(4)[4] * seed_init)
+seed_init <- floor(runif(4)[4] * date)
 # Define some constants and settings
 B <- 2000L
 nobs_seq <- c(25L, 50L)
