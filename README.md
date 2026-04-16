@@ -45,3 +45,8 @@ Code for reproducing the data applications can be found in
 - `application-Cheeseboro.R` for the wind gust semicentennial maximum in Cheeseboro, California, USA.
 - `application-Thames.R` for the river flow at Kingston, UK.
 - `application-Abisko.R` for the probability of landslide-triggering rainfall episodes in Abisko, Sweden.
+
+Code for reproducing additional figures can be found in
+
+- `plot-penultimate.R` for the penultimate parameters of Gaussian and Weibull, along with their max-stable extrapolation.
+- `plot-MAR.R` for the first-order max-autoregressive simulation and comparison of location parameters relative to independent data.
