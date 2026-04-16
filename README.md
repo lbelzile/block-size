@@ -32,3 +32,16 @@ Several scripts for generating the results presented in the paper, including
 
 - `tests-efficiency.R` for calculation of the relative efficiency of the marginal likelihood of the $m-1$ smallest order statistics out of $m$.
 - `tests-marginal-likelihood.R` for calculating the sampling distribution of the MLE for the data with full likelihood, marginal likelihood, and marginal likelihood together with additional support constraints.
+
+For power studies, we use the `simsalapar` package and the following scripts
+
+- `power-study-1-GEV.R` for the independent and identically distributed case;
+- `power-study-2-MDA.R` for max domain of attraction case (with Gumbel and normal);
+- `power-study-3-MAR.R` for max-autoregressive processes ;
+- `power-study-4-MAR.R` for block maxima of max-autoregressive processes. 
+
+Code for reproducing the data applications can be found in
+
+- `application-Cheeseboro.R` for the wind gust semicentennial maximum in Cheeseboro, California, USA.
+- `application-Thames.R` for the river flow at Kingston, UK.
+- `application-Abisko.R` for the probability of landslide-triggering rainfall episodes in Abisko, Sweden.
