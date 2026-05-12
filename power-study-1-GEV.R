@@ -35,15 +35,26 @@ for (id in modelid) {
     alt = list(type = "inner", value = c(1:3))
   )
 
-  doClusterApply(
+  out <- doClusterApply(
     vList = varList,
     doAL = FALSE,
     sfile = paste0("power-study-blocksize-1_", id, ".rds"),
     cluster = parallel::makeCluster(ncores, type = "PSOCK"),
     block.size = block,
     doOne = simu_fn,
+    check = FALSE,
     keepSeed = FALSE,
     seed = seed_init + 1:B,
     exports = ls()
   )
+  mk <- simsalapar::mkAL(x = out, vList = varList, repFirst = TRUE)
+  power <- simsalapar::array2df(getArray(mk, comp = "value")) |>
+    dplyr::group_by(alt, delta, nobs, m) |>
+    dplyr::summarize(
+      power = mean(value < 0.05, na.rm = TRUE),
+      .groups = "drop_last"
+    ) |>
+    dplyr::mutate(delta = delta_seq[as.integer(delta)])
+
+  save(power, file = paste0("power-study-1_", id, "-power.RData"))
 }

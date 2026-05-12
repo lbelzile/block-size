@@ -1,6 +1,7 @@
 library(mev)
 library(ggplot2)
 library(patchwork)
+setwd(this.path::here())
 
 # Compute penultimate approximation for standard Gaussian
 # over different block size m
@@ -87,7 +88,7 @@ g1b <- ggplot(
   mapping = aes(x = m, y = loc, linetype = approximation)
 ) +
   geom_line() +
-  labs(x = "block size", y = "location", subtitle = "Weibull")
+  labs(x = "block size", y = "location", subtitle = "Weibull(0.8)")
 g2b <- ggplot(
   data = penult_df,
   mapping = aes(x = m, y = scale, linetype = approximation)
@@ -101,8 +102,12 @@ g2c <- ggplot(
   geom_line() +
   labs(x = "block size", y = "shape")
 
-# Pring the plots
-(g1a + g2a + g3a) /
-  (g1b + g2b + g2c) +
+# Print the plots
+
+(g1b + g2b + g2c) / (g1a + g2a + g3a) +
   plot_layout(guides = "collect") &
   theme_classic() + theme(legend.position = "bottom")
+
+ggsave("fig/penultimate-parameters.pdf",
+       width = 10, height = 8, units = "in")
+

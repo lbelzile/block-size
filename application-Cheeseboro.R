@@ -1,6 +1,7 @@
 setwd(this.path::here())
 
 library(dplyr)
+conflictRules('dplyr', exclude = 'lag')
 library(mev)
 library(ggplot2)
 library(exdex)
@@ -8,6 +9,7 @@ library(lubridate)
 library(patchwork)
 library(xts)
 library(tinytable)
+
 
 source("helpers.R")
 
@@ -26,7 +28,7 @@ yearly_max <- xts::apply.yearly(
 )
 
 # Time series plot of wind gust speed as a function of day of the year
-# plus rugs for the yearly maxima
+# plus rugs for the yearly maxima - not in paper
 gg_ts_ymax <- ggplot(
   data = cheeseborowind,
   mapping = aes(x = lubridate::yday(date), y = gust)
@@ -132,13 +134,13 @@ tt_dfc |>
 
 ## Probability-probability plots
 
-set.seed(202504)
+set.seed(202604)
 qq2 <- qqplot.blocksize(
   xdat = gust2,
   type = c("max", "all"),
-  marginal = TRUE,
+  # marginal = TRUE,
   rounding = 1,
-  B = 200,
+  B = 1000,
   plot = FALSE,
   np = 125
 )
@@ -148,14 +150,36 @@ set.seed(202604)
 qq4 <- qqplot.blocksize(
   xdat = gust4,
   type = c("max", "all"),
-  marginal = TRUE,
+  # marginal = TRUE,
   rounding = 1,
-  B = 200,
+  B = 1000,
   plot = FALSE,
   np = 125
 )
 
-autoplot(qq2, type = "max") + autoplot(qq4, type = "max")
+save(qq2, qq4, file = "results/qqplots-Cheeseboro.RData")
+
+autoplot(qq2, type = "max") +
+  labs(caption = "m=2") +
+  autoplot(qq4, type = "max") +
+  labs(caption = "m=4")
+ggsave(
+  filename = "fig/cheeseboro-pp-plots-max.pdf",
+  width = 10,
+  height = 5,
+  units = "in"
+)
+
+autoplot(qq2, type = "all") +
+  labs(caption = "m=2") +
+  autoplot(qq4, type = "all") +
+  labs(caption = "m=4")
+ggsave(
+  filename = "fig/cheeseboro-pp-plots.pdf",
+  width = 10,
+  height = 5,
+  units = "in"
+)
 
 ## Investigation of extremal dependence
 
@@ -265,7 +289,7 @@ gg_gumbelplot <- ggplot() +
     shape = "block size"
   ) +
   theme_classic() +
-  theme(legend.position = "inside", legend.position.inside = c(0.9, 0.3))
+  theme(legend.position = "none")
 
 # Comparing extrapolations of different
 # fit to GEV to 50-year maxima
@@ -312,7 +336,7 @@ gg_50yrdens <- ggplot() +
     fun = function(x) {
       mev::dgev(x, loc = fit4[1], scale = fit4[2], shape = fit4[3])
     },
-    aes(col = "4"),
+    aes(col = "3"),
     linewidth = 1.5,
     n = 1001
   ) +
@@ -320,7 +344,7 @@ gg_50yrdens <- ggplot() +
     fun = function(x) {
       mev::dgev(x, loc = fit8[1], scale = fit8[2], shape = fit8[3])
     },
-    aes(col = "8"),
+    aes(col = "4"),
     linewidth = 1.5,
     n = 1001
   ) +
@@ -328,7 +352,7 @@ gg_50yrdens <- ggplot() +
     fun = function(x) {
       mev::dgev(x, loc = fit16[1], scale = fit16[2], shape = fit16[3])
     },
-    aes(col = "16"),
+    aes(col = "5"),
     linewidth = 1.5,
     n = 1001
   ) +
@@ -336,7 +360,7 @@ gg_50yrdens <- ggplot() +
   scale_x_continuous(limits = c(100, 370) * 0.6, expand = expansion()) +
   scale_color_manual(
     name = 'block size (days)',
-    breaks = paste0(c(1L, 2L, 4L, 8L, 16L)),
+    breaks = paste0(1:5),
     labels = paste0(c(1L, 2L, 4L, 8L, 16L)),
     values = MetBrewer::met.brewer(name = "Hiroshige", n = 5)
   ) +
@@ -348,8 +372,14 @@ gg_50yrdens <- ggplot() +
   theme_classic() +
   theme(
     legend.position = "inside",
-    legend.position.inside = c(0.9, 0.8)
+    legend.position.inside = c(0.8, 0.8)
   )
 
 
 gg_gumbelplot + gg_50yrdens
+ggsave(
+  filename = "fig/cheeseboro-gumbelplot-50yrdens.pdf",
+  width = 10,
+  height = 6,
+  units = "in"
+)

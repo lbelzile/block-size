@@ -14,7 +14,7 @@ shape_seq <- c(0, 0.2, 0.4)
 theta_seq <- c(seq(1, 0.25, by = -0.05))
 block_seq <- c(2L, 4L, 8L)
 # Cluster
-ncores <- 50L
+ncores <- 40L
 block <- 10L
 
 
@@ -30,14 +30,22 @@ varList <- simsalapar::varlist(
   m = list(type = "frozen", value = 2L)
 )
 
-doClusterApply(
+out <- doClusterApply(
   vList = varList,
   doAL = FALSE,
   sfile = "power-study-blocksize-4.rds",
   cluster = parallel::makeCluster(ncores, type = "PSOCK"),
   block.size = block,
   doOne = simu_fn_st,
+  check = FALSE,
   keepSeed = FALSE,
   seed = seed_init + 1:B,
   exports = ls()
 )
+
+mk <- simsalapar::mkAL(x = out, vList = varList, repFirst = TRUE)
+power4 <- simsalapar::array2df(getArray(mk, comp = "value")) |>
+  dplyr::group_by(alt, theta, shape, nobs, block) |>
+  dplyr::summarize(power = mean(value < 0.05, na.rm = TRUE)) |>
+  dplyr::mutate(theta = theta_seq[as.integer(theta)])
+save(power4, file = paste0("power-study-4.RData"))

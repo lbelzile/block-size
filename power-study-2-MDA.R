@@ -28,11 +28,11 @@ varList <- simsalapar::varlist(
   nobs = list(type = "grid", value = nobs_seq),
   id = list(type = "grid", value = id_seq),
   m = list(type = "grid", value = m_seq),
-  alt = list(type = "inner", value = 1:3),
-  m0 = list(type = "frozen", value = 30)
+  m0 = list(type = "frozen", value = 30),
+  alt = list(type = "inner", value = 1:3)
 )
 
-doClusterApply(
+out <- doClusterApply(
   vList = varList,
   doAL = FALSE,
   sfile = "power-study-blocksize-2.rds",
@@ -40,6 +40,13 @@ doClusterApply(
   block.size = block,
   doOne = simu_fn_mda,
   keepSeed = FALSE,
+  check = FALSE,
   seed = seed_init + 1:B,
   exports = ls()
 )
+mk <- simsalapar::mkAL(x = out, vList = varList, repFirst = TRUE)
+power2 <- simsalapar::array2df(getArray(mk, comp = "value")) |>
+  dplyr::group_by(alt, delta, nobs, m, id) |>
+  dplyr::summarize(power = mean(value < 0.05, na.rm = TRUE)) |>
+  dplyr::mutate(delta = delta_seq[as.integer(delta)])
+save(power2, file = paste0("power-study-2.RData"))

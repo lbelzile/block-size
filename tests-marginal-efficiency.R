@@ -108,7 +108,7 @@ eff_df <- array2DF(x = eff, responseName = "efficiency") |>
 
 ggplot(
   data = eff_df,
-  mapping = aes(x = shape, col = m, linetype = m, y = efficiency)
+  mapping = aes(x = shape, col = m, linetype = m, y = sqrt(efficiency))
 ) +
   geom_point() +
   geom_line() +

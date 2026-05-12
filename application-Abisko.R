@@ -8,6 +8,8 @@ library(patchwork)
 
 source("helpers.R")
 
+# Profile likelihood
+
 data(abisko, package = "mev")
 
 # Fill in series to replace missing days with zeros
@@ -29,7 +31,7 @@ plot(
   format.labels = "%Y"
 )
 
-# Keep months June-August, and exactly 12 weeks a year
+# Keep months June-September, and exactly 12 weeks a year
 # The aggregate to four week period (m=4)
 # And from there to yearly (m=3)
 days_seq <- seq(
@@ -49,6 +51,21 @@ plot(
   yaxs = "i",
   pch = 20
 )
+
+plot(
+  x = yday(xdat),
+  y = xdat,
+  ylab = "cumulative three-day rainfall",
+  xlab = "day of year",
+  bty = "l",
+  ylim = c(0, max(xdat) + 1),
+  yaxs = "i",
+  pch = 20,
+  col = ifelse(xdat < 10, "grey", "black"),
+  panel.last = {
+    abline(h = 10, col = "grey")
+  }
+)
 # Make a data frame with consecutive time stamps
 df_abisko3 <- data.frame(
   time = year(xdat) + yday(xdat) / diff(range(days_seq)),
@@ -65,28 +82,48 @@ xdat_month <- build.blocks(
   block = 7 * 4,
   m = 3
 )
+
+xdat_year <- xdat_month[, 3]
+
 # Left-censoring bound
-lb <- 10
+lb <- 5
 mean(xdat_week < lb)
 mean(xdat_month < lb)
 mean(xdat_month[, 3] < lb)
 
+# Preliminary optimization - without rounding
+fit_week_prelim <- fit.gevblock(xdat = xdat_week, lb = lb)
+fit_month_prelim <- fit.gevblock(xdat = xdat_month, lb = lb)
+fit_year_prelim <- fit.gevblock(
+  xdat = xdat_month[, 3, drop = FALSE],
+  lb = lb
+)
+
 # Estimate parameters with different block sizes
-fit_week <- fit.gevblock(
+fit_week <- optim(
+  fn = gev.loglik.cens,
+  par = fit_week_prelim,
   xdat = xdat_week,
   lb = lb,
-  rounding = 0.1
-)
-fit_month <- fit.gevblock(
+  rounding = 0.1,
+  control = list(fnscale = -1),
+  method = "Nelder")$par
+fit_month <- optim(
+  fn = gev.loglik.cens,
+  par = fit_month_prelim,
   xdat = xdat_month,
   lb = lb,
-  rounding = 0.1
-)
-fit_year <- fit.gevblock(
-  xdat = xdat_month[, 3, drop = FALSE],
+  rounding = 0.1,
+  control = list(fnscale = -1),
+  method = "Nelder")$par
+fit_year <- optim(
+  fn = gev.loglik.cens,
+  par = fit_year_prelim,
+  xdat = xdat_year,
   lb = lb,
-  rounding = 0.1
-)
+  rounding = 0.1,
+  control = list(fnscale = -1),
+  method = "Nelder")$par
 
 # Likelihood ratio tests
 test_week <- test.blocksize(
@@ -100,6 +137,33 @@ test_month <- test.blocksize(
   rounding = 0.1
 )
 
+# Sensitivity analysis
+
+test.blocksize(xdat = xdat_week, lb = 5, rounding = 0.1)
+test.blocksize(xdat = xdat_week, lb = 15, rounding = 0.1)
+
+test.blocksize(xdat = xdat_month, lb = 5, rounding = 0.1)
+test.blocksize(xdat = xdat_month, lb = 15, rounding = 0.1)
+
+# Compare parameter estimates when modifying the threshold
+optim(
+  fn = gev.loglik.cens,
+  par = fit_week_prelim,
+  xdat = xdat_week,
+  lb = 5,
+  rounding = 0.1,
+  control = list(fnscale = -1),
+  method = "Nelder")$par
+
+optim(
+  fn = gev.loglik.cens,
+  par = fit_week_prelim,
+  xdat = xdat_week,
+  lb = 15,
+  rounding = 0.1,
+  control = list(fnscale = -1),
+  method = "Nelder")$par
+
 # Quantile-quantile plots for the model
 
 set.seed(202604)
@@ -107,103 +171,61 @@ qq_week <- qqplot.blocksize(
   xdat = xdat_week,
   lb = lb,
   type = c("all", "max"),
-  B = 200,
+  B = 2000,
   marginal = FALSE,
   rounding = 0.1,
   plot = FALSE,
   n = 250
 )
 
-
+set.seed(202604)
 qq_month <- qqplot.blocksize(
   xdat = xdat_month,
   lb = lb,
   type = c("all", "max"),
-  B = 200,
+  B = 2000,
   marginal = FALSE,
   rounding = 0.1,
   plot = FALSE,
   np = 250
 )
-autoplot(qq_week, type = "all") + autoplot(qq_month, type = "all")
-
+save(qq_week, qq_month, file = "results/qqplots-Abisko.RData")
+autoplot(qq_week, type = "all") +
+  labs(caption = "7-days (weekly) maximum") +
+  autoplot(qq_month, type = "all") +
+  labs(caption = "28-days (monthly) maximum")
+ggsave(filename = "fig/Abisko-pp-plots.pdf", width = 10, height = 6, units = "in")
 
 # Check coefficients with max-stability
 rbind(month2week = maxstable(fit_week, 4), month = fit_month)
-
-# Profile likelihood
-
-g1_abi <- ggplot(
-  data = df_abisko3,
-  mapping = aes(x = time, y = rain)
-) +
-  geom_point() +
-  scale_y_continuous(limits = c(10, NA), expand = expansion()) +
-  scale_x_continuous(
-    breaks = c(1913, seq(1920, 2010, by = 10L), 2014),
-    limits = c(1913, 2015),
-    expand = expansion()
-  ) +
-  labs(x = "", y = "cumulative three-day rainfall (mm)") +
-  theme_classic()
-
-# Function to calculate the GEV log likelihood with censored data
-gev.loglik.cens <- function(pars, xdat, lb, interval) {
-  delta <- interval[1] / 2
-  xdat <- as.numeric(xdat)
-  if (pars[2] < 0 | pars[3] < -1) {
-    return(-Inf)
-  }
-  obj <- sum(ifelse(
-    xdat < lb,
-    mev::pgev(lb, pars[1], pars[2], pars[3], log.p = TRUE),
-    log(
-      mev::pgev(xdat + delta, pars[1], pars[2], pars[3]) -
-        mev::pgev(xdat - delta, pars[1], pars[2], pars[3])
-    )
-  ))
-  obj
-}
-
-#' Profile log-likelihood for probability of exceedance
-gev.prof.prob <- function(
-  pars,
-  psi,
-  xquant,
-  xdat,
-  lb,
-  interval,
-  m = 1
-) {
-  sigma <- exp(pars[1])
-  xi <- pars[2]
-  mu <- xquant - sigma / xi * ((-log(1 - psi) / m)^(-xi) - 1)
-  gev.loglik.cens(
-    c(mu, sigma, xi),
-    xdat = xdat,
-    lb = lb,
-    interval = interval
-  )
-}
 
 # Sequence of values for log-probability at which to profile
 psi_seq <- exp(seq(-8.5, -2, by = 0.05))
 # Matrices for storing the other parameter vectors and the
 # negative profile log likelihood values
-prof_pars_mth <- matrix(ncol = 2, nrow = length(psi_seq))
-prof_nll_mth <- numeric(length = length(psi_seq))
+prof_pars_wk <- prof_pars_mth <- prof_pars_yr <- matrix(
+  ncol = 2,
+  nrow = length(psi_seq)
+)
+prof_nll_wk <- prof_nll_mth <- prof_nll_yr <- numeric(length = length(psi_seq))
 
-prof_pars_yr <- matrix(ncol = 2, nrow = length(psi_seq))
-prof_nll_yr <- numeric(length = length(psi_seq))
-
-xdat_year <- xdat_month[, 3]
 
 # Obtain initial values for optimization from MLE
+init_wk <- c(log(fit_week[2]), fit_week[3])
 init_mth <- c(log(fit_month[2]), fit_month[3])
 init_yr <- c(log(fit_year[2]), fit_year[3])
 # Max-stability extrapolation of parameters from fit to monthly max to yearly
+w2y <- maxstable(fit_week, m = 12)
 m2y <- maxstable(fit_month, m = 3)
 # Maximum likelihood estimates from the models for annual probability of exceedance of 69.9 mm
+
+pexc_mle_wk <- mev::pgev(
+  q = 69.9,
+  w2y[1],
+  w2y[2],
+  w2y[3],
+  lower.tail = FALSE
+)
 pexc_mle_mth <- mev::pgev(
   q = 69.9,
   m2y[1],
@@ -221,7 +243,27 @@ pexc_mle_yr <- mev::pgev(
 
 # Profile loop: start from MLE index, and go up/down
 is <- which.min(abs(psi_seq - pexc_mle_mth))
-for (i in is:length(psi_seq)) {
+n_psi <- length(psi_seq)
+for (i in c(is:n_psi, (is - 1):1)) {
+  opt_wk <- optim(
+    par = init_wk,
+    fn = gev.prof.prob,
+    method = "N",
+    control = list(fnscale = -1),
+    psi = psi_seq[i],
+    xquant = 69.9,
+    xdat = xdat_week,
+    lb = lb,
+    m = 12,
+    rounding = 0.1
+  )
+  prof_nll_wk[i] <- opt_wk$value
+  prof_pars_wk[i, ] <- opt_wk$par
+  if (i != n_psi) {
+    init_wk <- opt_wk$par
+  } else {
+    init_wk <- prof_pars_wk[is, ]
+  }
   opt_mth <- optim(
     par = init_mth,
     fn = gev.prof.prob,
@@ -232,11 +274,15 @@ for (i in is:length(psi_seq)) {
     xdat = xdat_month,
     lb = lb,
     m = 3,
-    interval = 0.1
+    rounding = 0.1
   )
   prof_nll_mth[i] <- opt_mth$value
   prof_pars_mth[i, ] <- opt_mth$par
-  init_mth <- opt_mth$par
+  if (i != n_psi) {
+    init_mth <- opt_mth$par
+  } else {
+    init_mth <- prof_pars_mth[is, ]
+  }
   opt_yr <- optim(
     par = init_yr,
     fn = gev.prof.prob,
@@ -247,61 +293,48 @@ for (i in is:length(psi_seq)) {
     xdat = xdat_month[, 3],
     lb = lb,
     m = 1,
-    interval = 0.1
+    rounding = 0.1
   )
   prof_nll_yr[i] <- opt_yr$value
   prof_pars_yr[i, ] <- opt_yr$par
-  init_yr <- opt_yr$par
+  if (i != n_psi) {
+    init_yr <- opt_yr$par
+  } else {
+    init_yr <- prof_pars_yr[is, ]
+  }
 }
-for (i in (is - 1):1) {
-  opt_mth <- optim(
-    par = init_mth,
-    fn = gev.prof.prob,
-    method = "N",
-    control = list(fnscale = -1),
-    psi = psi_seq[i],
-    xquant = 69.9,
-    xdat = xdat_month,
-    lb = lb,
-    m = 3,
-    interval = 0.1
-  )
-  prof_nll_mth[i] <- opt_mth$value
-  prof_pars_mth[i, ] <- opt_mth$par
-  init_mth <- opt_mth$par
-  opt_yr <- optim(
-    par = init_yr,
-    fn = gev.prof.prob,
-    method = "N",
-    control = list(fnscale = -1),
-    psi = psi_seq[i],
-    xquant = 69.9,
-    xdat = xdat_month[, 3],
-    lb = lb,
-    m = 1,
-    interval = 0.1
-  )
-  prof_nll_yr[i] <- opt_yr$value
-  prof_pars_yr[i, ] <- opt_yr$par
-  init_yr <- opt_yr$par
-}
-
 # Calculate the profile log likelihood at the MLE
+max_pll_wk <- gev.loglik.cens(
+  pars = fit_week,
+  xdat = xdat_week,
+  lb = lb,
+  rounding = 0.1
+)
 max_pll_mth <- gev.loglik.cens(
   pars = fit_month,
   xdat = xdat_month,
   lb = lb,
-  interval = 0.1
+  rounding = 0.1
 )
 max_pll_yr <- gev.loglik.cens(
   pars = fit_year,
   xdat = xdat_year,
   lb = lb,
-  interval = 0.1
+  rounding = 0.1
 )
 
 # Create a list wrapper, to pass to 'mev' eprof
 # routine to calculate confidence intervals
+pll_wk <- list(
+  pll = -prof_nll_wk,
+  mle = pexc_mle_wk,
+  maxpll = max_pll_wk,
+  psi = psi_seq,
+  psi.max = pexc_mle_wk,
+  r = sign(pexc_mle_wk - psi_seq) *
+    sqrt(2 * (max(prof_nll_wk) - prof_nll_wk))
+)
+
 pll_mth <- list(
   pll = -prof_nll_mth,
   mle = pexc_mle_mth,
@@ -321,7 +354,8 @@ pll_yr <- list(
   r = sign(pexc_mle_yr - psi_seq) *
     sqrt(2 * (max(prof_nll_yr) - prof_nll_yr))
 )
-class(pll_mth) <- class(pll_yr) <- "eprof"
+class(pll_wk) <- class(pll_mth) <- class(pll_yr) <- "eprof"
+(confint(pll_wk))
 (confint(pll_mth))
 (confint(pll_yr))
 plot(
@@ -344,7 +378,10 @@ plot(
   bty = "n"
 )
 lines(psi_seq, prof_nll_yr - max_pll_yr, col = 2, lwd = 1.5)
-ns <- length(psi_seq)
+lines(psi_seq, prof_nll_wk - max_pll_wk, col = 4, lwd = 1.5)
+
+conf_wk <- confint(pll_wk)
+rug(conf_wk, lwd = 2, col = 4)
 conf_mth <- confint(pll_mth)
 rug(conf_mth, lwd = 2)
 conf_yr <- confint(pll_yr)
@@ -353,10 +390,45 @@ rug(conf_yr, col = 2, lwd = 2)
 # Do the same plot, with ggplot2 instead
 prof_abisko_df <-
   data.frame(
-    p = rep(psi_seq, length.out = 2 * ns),
-    profile = c(prof_nll_mth - max_pll_mth, prof_nll_yr - max_pll_yr),
-    type = factor(rep(c("28-days", "yearly"), each = ns))
+    p = rep(psi_seq, length.out = 3 * n_psi),
+    profile = c(
+      prof_nll_wk - max_pll_wk,
+      prof_nll_mth - max_pll_mth,
+      prof_nll_yr - max_pll_yr
+    ),
+    type =
+      factor(
+        rep(c("weekly", "monthly", "seasonal"), each = n_psi),
+      levels = c("weekly", "monthly", "seasonal")
+    )
   )
+
+
+g1_abi <- ggplot(
+  data = df_abisko3 |> dplyr::filter(rain > 0),
+  mapping = aes(
+    x = time,
+    y = rain,
+    col = factor(rain <= 10)
+  )
+) +
+  geom_hline(yintercept = 10, col = "grey") +
+  geom_point() +
+  scale_color_grey() +
+  scale_y_continuous(limits = c(0, NA), expand = expansion()) +
+  scale_x_continuous(
+    breaks = seq(1920, 2010, by = 10L),
+    limits = c(1913, 2016),
+    expand = expansion()
+  ) +
+  labs(
+    x = "",
+    y = "",
+    subtitle = "cumulative three-day rainfall (mm)"
+  ) +
+  theme_classic() +
+  theme(legend.position = "grey")
+
 
 g2_abi <- ggplot(
   data = prof_abisko_df,
@@ -370,8 +442,9 @@ g2_abi <- ggplot(
   geom_line(mapping = aes(y = profile), linewidth = 1.25) +
   geom_rug(
     data = data.frame(
-      p = c(conf_mth, conf_yr),
-      type = factor(rep(c("28-days", "yearly"), each = 3))
+      p = c(conf_wk, conf_mth, conf_yr),
+      type = factor(rep(c("weekly", "monthly", "seasonal"), each = 3),
+                    levels = c("weekly", "monthly", "seasonal"))
     ),
     mapping = aes(x = p, col = type),
     linewidth = 1.25,
@@ -389,20 +462,21 @@ g2_abi <- ggplot(
     oob = scales::oob_keep
   ) +
   MetBrewer::scale_color_met_d("Hiroshige") +
-  theme_classic()
+  theme_classic() +
+  theme(legend.position = "bottom")
 
 g1_abi + g2_abi
-
+ggsave(filename = "fig/Abisko-data-profile.pdf", width = 11, height = 6, units = "in")
 
 # Bayesian analysis with default non informative priors
 # not reported in the paper, yields similar results
-gev.lpost <- function(pars, xdat, lb, interval) {
+gev.lpost <- function(pars, xdat, lb, rounding) {
   revdbayes::gev_flat(pars, min_xi = -1) +
     gev.loglik.cens(
       pars = pars,
       xdat = xdat,
       lb = lb,
-      interval = interval
+      rounding = rounding
     )
 }
 
@@ -414,7 +488,7 @@ rou <- rust::ru(
   mode = fit_month,
   xdat = c(xdat_month),
   lb = lb,
-  interval = 0.1,
+  rounding = 0.1,
   lower = c(-Inf, 1e-8, -1)
 )$sim_vals
 

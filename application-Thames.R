@@ -35,13 +35,13 @@ pvals_thames
 # Check for extremal clustering
 exdex::spm(data = flow, b = 3)
 
-# Diagnostic plots
+# Diagnostic plots - not included in paper
 set.seed(2026)
-qqplot.blocksize(
+qqplot_thames <- qqplot.blocksize(
   xdat = build.blocks(
     thames$flow,
     block = 1,
     m = 2
   ),
-  B = 200
+  B = 500
 )

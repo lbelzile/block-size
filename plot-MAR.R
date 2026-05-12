@@ -7,12 +7,13 @@ theta <- 0.5
 m <- seq(1, 20, length.out = 101)
 # Simulate from Tavares first-order max-autoregressive process
 # with unconditional standard Gumbel margins
-y <- rmar1(n = 1000, theta = theta, shape = 0)
+y <- rmar1(n = 200, theta = theta, shape = 0)
 gg1_tav <- ggplot(
   data = data.frame(y = y, x = seq_along(y)),
   mapping = aes(y = y, x = x)
 ) +
   geom_point() +
+  geom_line() +
   labs(x = "time", y = "") +
   theme_classic()
 

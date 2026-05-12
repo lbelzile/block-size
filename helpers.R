@@ -188,7 +188,7 @@ simu_fn_st <- function(
   )
   xdat <- apply(xdat, 2:3, max)
   xdat <- t(apply(xdat, 1, sort))
-  pvals <- try(test.blocksize(xdat, alt = alt), silent = TRUE)
+  pvals <- try(mev::test.blocksize(xdat, alt = alt), silent = TRUE)
   if (inherits(pvals, "try-error")) {
     pvals <- rep(NA, length(alt))
   }
@@ -260,7 +260,108 @@ simu_fn <- function(id, delta, nobs, m, alt) {
     )
   }
 
-  pvals <- try(test.blocksize(xdat, alt = alt), silent = TRUE)
+  pvals <- try(mev::test.blocksize(xdat, alt = alt), silent = TRUE)
+  if (inherits(pvals, "try-error")) {
+    pvals <- rep(NA, length(alt))
+  }
+  if (is.data.frame(pvals)) {
+    pvals <- pvals$pval
+  }
+  return(pvals)
+}
+
+#' Power study from iid GEV data
+#'
+#' This function generate samples of observations, run
+#' likelihood ratio tests for serially dependent data from
+#' max first-order autoregressive process with tail index \code{theta}
+#' @param nobs number of vectors of size m to generate
+#' @param m block size
+#' @param delta vector of positive (or larger than 1) indicating departure from max-stability
+#' @param id string, either \code{weibull} for the GEV penultimate approximation to blocks of size 30 from a Weibull(1, 0.8) or \code{normal} for GEV penultimate approximation to blocks of size 30 from standard normal.
+#' @param alt integer 1, 2 or 3, indicating the alternative distribution
+#' @param icens logical; if \code{TRUE}, data are interval censored and rounded
+#' @param lcens logical; if \code{TRUE}, data are left-censored at the 0.25 percentile
+#' @return a vector of p-values of the same length as \code{alt}
+simu_fn_cens <- function(
+  delta,
+  nobs,
+  m,
+  alt = 1:3,
+  id = c("weibull","normal"),
+  icens = FALSE,
+  lcens = 0
+) {
+  id <- match.arg(id)
+  stopifnot(length(icens) == 1L, is.logical(icens))
+  stopifnot(length(lcens) == 1L, lcens < 0.8)
+  stopifnot(isTRUE(all(alt %in% 1:4)))
+  # Simulate max-stable data from GEV
+  if (id == "weibull") {
+    # Simulate max-stable data from GEV
+    pars1 <- mev::penultimate(
+      family = 'weibull',
+      shape = 0.8,
+      m = 30,
+      method = "bm",
+      returnList = FALSE
+    )[1, 1:3]
+    pars2 <- mev::penultimate(
+      family = 'weibull',
+      shape = 0.8,
+      m = 30 * delta,
+      method = "bm",
+      returnList = FALSE
+    )[1, 1:3]
+    xdat <- sim_alt(
+      n = nobs,
+      m = m,
+      coef1 = pars1,
+      coef2 = pars2
+    )
+    rd <- 0.5
+  } else if (id == "normal") {
+    pars1 <- mev::penultimate(
+      family = 'norm',
+      m = 30,
+      method = "bm",
+      returnList = FALSE
+    )[1, 1:3]
+    pars2 <- mev::penultimate(
+      family = 'norm',
+      m = 30 * delta,
+      method = "bm",
+      returnList = FALSE
+    )[1, 1:3]
+    xdat <- sim_alt(
+      n = nobs,
+      m = m,
+      coef1 = pars1,
+      coef2 = pars2
+    )
+    # sd is about 0.5
+    rd <- 0.2
+  }
+  if (icens) {
+    xdat <- round(xdat / rd) * rd
+  } else {
+    rd <- 0
+  }
+  if (lcens < 1e-8) {
+    lb <- NULL
+  } else{
+    lb <- mev::qgev(
+      p = lcens,
+      loc = pars1$loc,
+      scale = pars1$scale,
+      shape = pars1$shape
+    )
+  }
+  pvals <- try(
+    mev::test.blocksize(xdat, alt = alt, lb = lb, rounding = rd),
+    silent = TRUE
+  )
+
   if (inherits(pvals, "try-error")) {
     pvals <- rep(NA, length(alt))
   }
@@ -302,7 +403,7 @@ simu_fn_mda <- function(id, delta, nobs, m, alt, m0 = 30) {
     dist = dist,
     args = args
   )
-  pvals <- try(get_pvals(xdat, alt = alt), silent = TRUE)
+  pvals <- try(mev::test.blocksize(xdat, alt = alt), silent = TRUE)
   if (is.data.frame(pvals)) {
     pvals <- pvals$pval
   }
@@ -326,29 +427,28 @@ autoplot.mev_plot_blocksize <- function(
     x$type
   })
   tind <- which(type_plot == type)
-
   df <- with(
     x$plots[[tind]],
     data.frame(
       x = x,
       y = y,
-      jtlower = confint$simultaneous[, 1],
-      jtupper = confint$simultaneous[, 2],
-      ptlower = confint$pointwise[, 1],
-      ptupper = confint$pointwise[, 2]
+      lower = confint[, "lower"],
+      upper = confint[, "upper"]
     )
   )
+
   gg1 <- ggplot(data = df) +
-    geom_abline(intercept = 0, slope = 1) +
     geom_segment(
-      alpha = 0.1,
-      col = "grey90",
-      mapping = aes(x = x, y = jtlower, yend = jtupper)
-    ) +
-    geom_segment(
-      alpha = 0.2,
       col = "grey70",
-      mapping = aes(x = x, y = ptlower, yend = ptupper)
+      mapping = aes(x = x, y = lower, yend = upper)
+    ) +
+    geom_abline(intercept = 0, slope = 1) +
+    geom_point(
+      mapping = aes(
+        x = x,
+        y = y,
+        col = factor(ifelse(y < lower | y > upper, "outside", "inside"))
+      )
     ) +
     scale_x_continuous(
       limits = c(0, 1),
@@ -362,16 +462,64 @@ autoplot.mev_plot_blocksize <- function(
       breaks = seq(0, 1, by = 0.25),
       labels = c("0", "0.25", "0.5", "0.75", "1")
     ) +
-    geom_point(
-      mapping = aes(
-        x = x,
-        y = y,
-        col = factor(ifelse(y < jtlower | y > jtupper, "outside", "inside"))
-      )
-    ) +
     scale_color_manual(values = c("black", "#e76254")) +
     labs(x = "theoretical positions", y = "empirical positions") +
     theme_classic() +
     theme(legend.position = "none")
   return(gg1)
+}
+
+
+#' GEV log likelihood with censored data
+#'
+#' @param pars vector of location, scale and shape parameters
+#' @param xdat vector of observations
+#' @param lb lower bound for left-censoring
+#' @param rounding double indicating rounding amount, e.g., 1 for nearest integer
+#' @param return value of censored log likelihood
+gev.loglik.cens <- function(pars, xdat, lb, rounding) {
+  delta <- rounding[1] / 2
+  xdat <- as.numeric(xdat)
+  if (pars[2] < 0 | pars[3] < -1) {
+    return(-Inf)
+  }
+  obj <- sum(ifelse(
+    xdat < lb,
+    mev::pgev(lb, pars[1], pars[2], pars[3], log.p = TRUE),
+    log(
+      mev::pgev(xdat + delta, pars[1], pars[2], pars[3]) -
+        mev::pgev(xdat - delta, pars[1], pars[2], pars[3])
+    )
+  ))
+  obj
+}
+
+#' Profile log-likelihood for probability of exceedance for censored GEV
+#'
+#' @param pars vector of log scale and shape parameter
+#' @param psi double giving the probability of exceedance
+#' @param xquant estimate of the quantile at probability \eqn{1-\psi}
+#' @param xdat vector of observations
+#' @param lb lower bound for left-censoring
+#' @param rounding double indicating the amount of rounding
+#' @param m integer giving the period for extrapolation
+#' @param return value of censored log likelihood
+gev.prof.prob <- function(
+    pars,
+    psi,
+    xquant,
+    xdat,
+    lb,
+    rounding,
+    m = 1
+) {
+  sigma <- exp(pars[1])
+  xi <- pars[2]
+  mu <- xquant - sigma / xi * ((-log(1 - psi) / m)^(-xi) - 1)
+  gev.loglik.cens(
+    c(mu, sigma, xi),
+    xdat = xdat,
+    lb = lb,
+    rounding = rounding
+  )
 }
