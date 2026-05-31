@@ -45,8 +45,9 @@ out <- doClusterApply(
   seed = seed_init + 1:B,
   exports = ls()
 )
-mk <- simsalapar::mkAL(x = out, vList = varList, repFirst = TRUE)
-power <- simsalapar::array2df(getArray(mk, comp = "value")) |>
+power <- simsalapar::array2df(
+  simsalapar::getArray(
+    simsalapar::mkAL(x = out, vList = varList, repFirst = TRUE, check = FALSE), comp = "value")) |>
   dplyr::group_by(alt, delta, nobs, m, id, icens, lcens) |>
   dplyr::summarize(
     power = mean(value < 0.05, na.rm = TRUE),

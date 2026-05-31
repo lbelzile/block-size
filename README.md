@@ -62,4 +62,5 @@ Code for reproducing additional figures can be found in
 - `plot-penultimate-density.R` for the GEV and true density for $m=30$ and $m=300$.
 - `plot-MAR.R` for the first-order max-autoregressive simulation and comparison of location parameters relative to independent data.
 - `plot-GEV-efficiency.R` for the efficiency ratios for GEV data.
+- `plot-power-study-1.R`, `plot-power-study-5.R` to produce plots in Figures 3 and A6
 

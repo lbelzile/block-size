@@ -3,7 +3,6 @@ setwd(this.path::here())
 library(mev)
 library(simsalapar)
 source("helpers.R")
-source("qqplot_NEW.R")
 
 
 date <- 20250506
@@ -96,7 +95,7 @@ get_coverage <- function(
       pp_boot <- try(
         qqplot.blocksize(
           xdat = xdat,
-          simult = level[i, ],
+          simult = 1 - level[i, ],
           type = type,
           marginal = marginal,
           rounding = rounding,
